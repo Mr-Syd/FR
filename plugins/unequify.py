@@ -12,7 +12,6 @@ from .public import SYD_CHANNELS
 from .test import CLIENT , start_clone_bot
 from translation import Translation
 from pyrogram import Client, filters, enums
-#from pyropatch.utils import unpack_new_file_id
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 CLIENT = CLIENT()
@@ -36,12 +35,12 @@ async def unequify(client, message):
    if temp.lock.get(user_id) and str(temp.lock.get(user_id))=="True":
       return await message.reply("Pʟᴇᴀꜱᴇ Wᴀɪᴛ Uɴᴛɪʟ Pʀᴇᴠɪᴏᴜꜱ Tᴀꜱᴋ Iꜱ Cᴏᴍᴩʟᴇᴛᴇᴅ")
    _bot = await db.get_bot(user_id)
-   if not _bot or _bot['is_bot']:
-      return await message.reply("Nᴇᴇᴅ UꜱᴇʀBᴏᴛ To Foʀ Tʜɪꜱ Pʀᴏᴄᴇꜱꜱ. Pʟᴇᴀꜱᴇ Aᴅᴅ A UꜱᴇʀBᴏᴛ Uꜱɪɴɢ /settings")
    not_joined_channels = []
+   if not _bot:
+      return await message.reply("Nᴇᴇᴅ A Bᴏᴛ Foʀ Tʜɪꜱ Pʀᴏᴄᴇꜱꜱ. Pʟᴇᴀꜱᴇ Aᴅᴅ A Bᴏᴛ Uꜱɪɴɢ /settings")
    for channel in SYD_CHANNELS:
         try:
-            user = await bot.get_chat_member(channel, message.from_user.id)
+            user = await client.get_chat_member(channel, message.from_user.id)
             if user.status in {"kicked", "left"}:
                 not_joined_channels.append(channel)
         except UserNotParticipant:
@@ -77,7 +76,7 @@ async def unequify(client, message):
         
    target = await client.ask(user_id, text="Forward The Last Message From Target Chat Or Send Last Message Link.\n/cancel - To Cancel This Process")
    if target.text.startswith("/"):
-      return await message.reply("Process Cancelled !")
+      return await message.reply("Pʀᴏᴄᴇꜱꜱ Cᴀɴᴄᴇʟʟᴇᴅ !")
    elif target.text:
       regex = re.compile(r"(https://)?(t\.me/|telegram\.me/|telegram\.dog/)(c/)?(\d+|[a-zA-Z_0-9]+)/(\d+)$")
       match = regex.match(target.text.replace("?single", ""))
@@ -108,37 +107,51 @@ async def unequify(client, message):
        return await bot.stop()
    MESSAGES = []
    DUPLICATE = []
-   total=deleted=0
+   total=0
+   deleted=0
    temp.lock[user_id] = True
    try:
-     await sts.edit(Translation.DUPLICATE_TEXT.format(total, deleted, "Progressing"), reply_markup=CANCEL_BTN)
-     async for message in bot.search_messages(chat_id=chat_id, filter=enums.MessagesFilter.DOCUMENT):
-        if temp.CANCEL.get(user_id) == True:
-           await sts.edit(Translation.DUPLICATE_TEXT.format(total, deleted, "Cancelled"), reply_markup=COMPLETED_BTN)
-           return await bot.stop()
-        file = message.document
-        file_id = unpack_new_file_id(file.file_id) 
-        if file_id in MESSAGES:
-           DUPLICATE.append(message.id)
-        else:
-           MESSAGES.append(file_id)
-        total += 1
-        if total %10000 == 0:
-           await sts.edit(Translation.DUPLICATE_TEXT.format(total, deleted, "Progressing"), reply_markup=CANCEL_BTN)
-        if len(DUPLICATE) >= 100:
-           await bot.delete_messages(chat_id, DUPLICATE)
-           deleted += 100
-           await sts.edit(Translation.DUPLICATE_TEXT.format(total, deleted, "Cancelled"), reply_markup=CANCEL_BTN)
-           DUPLICATE = []
+     await sts.edit(Translation.DUPLICATE_TEXT.format(total, deleted, "Pʀᴏɢʀᴇꜱꜱɪɴɢ""), reply_markup=CANCEL_BTN)
+     # Instead of search_messages, loop through IDs
+     for msg_id in range(1, last_msg_id + 1):
+         if temp.CANCEL.get(user_id) == True:
+             await sts.edit(Translation.DUPLICATE_TEXT.format(total, deleted, "Cᴀɴᴄᴇʟʟᴇᴅ"), reply_markup=COMPLETED_BTN)
+             return await bot.stop()
+         
+         try:
+             message = await bot.get_messages(chat_id, msg_id)
+         except Exception:
+             continue  # skip if deleted/unavailable
+         
+         if not message or not message.document:
+             continue
+         
+         file = message.document
+         file_id = file.file_unique_id 
+         if file_id in MESSAGES:
+             DUPLICATE.append(message.id)
+         else:
+             MESSAGES.append(file_id)
+         
+         total += 1
+         if total % 10000 == 0:
+             await sts.edit(Translation.DUPLICATE_TEXT.format(total, deleted, "Pʀᴏɢʀᴇꜱꜱɪɴɢ"), reply_markup=CANCEL_BTN)
+         
+         if len(DUPLICATE) >= 100:
+             await bot.delete_messages(chat_id, DUPLICATE)
+             deleted += len(DUPLICATE)
+             await sts.edit(Translation.DUPLICATE_TEXT.format(total, deleted, "Pʀᴏɢʀᴇꜱꜱɪɴɢ"), reply_markup=CANCEL_BTN)
+             DUPLICATE = []
+     
      if DUPLICATE:
-        await bot.delete_messages(chat_id, DUPLICATE)
-        deleted += len(DUPLICATE)
+         await bot.delete_messages(chat_id, DUPLICATE)
+         deleted += len(DUPLICATE)
    except Exception as e:
        temp.lock[user_id] = False 
        await sts.edit(f"**Error**\n\n`{e}`")
        return await bot.stop()
    temp.lock[user_id] = False
-   await sts.edit(Translation.DUPLICATE_TEXT.format(total, deleted, "Completed"), reply_markup=COMPLETED_BTN)
+   await sts.edit(Translation.DUPLICATE_TEXT.format(total, deleted, "Cᴏᴍᴩʟᴇᴛᴇᴅ"), reply_markup=COMPLETED_BTN)
    await bot.stop()
    
 
